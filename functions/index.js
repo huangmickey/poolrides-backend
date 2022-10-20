@@ -40,7 +40,7 @@ const validateFirebaseIdToken = async (req, res, next) => {
 }
 
 
-exports.postmethod = functions.https.onRequest(async (request, res) => {
+exports.requestride = functions.https.onRequest(async (request, res) => {
   if (request.method !== "POST") {
     res.status(405).send('HTTP Method ' + request.method + ' not allowed')
     return false
@@ -85,7 +85,8 @@ exports.postmethod = functions.https.onRequest(async (request, res) => {
         /**/console.log("Driver Lat: " + driver.lat)
         /**/console.log("Driver Lng: " + driver.lng)
         /**/console.log("\n")
-      /**/});
+        /**/
+});
       /**/console.log(driverList.length)
       /**/console.log("======================================================================")
       /**/console.log("\n")
@@ -104,11 +105,12 @@ exports.postmethod = functions.https.onRequest(async (request, res) => {
           /**/console.log("Driver Lat: " + driver.lat)
           /**/console.log("Driver Lng: " + driver.lng)
           /**/console.log("\n")
-        /**/});
+          /**/
+});
         /**/console.log(newDriverList.length)
         /**/console.log("======================================================================")
         /**/console.log("\n")
-        
+
         if (newDriverList.length == 0 || newDriverList == false) {
           res.status(400).send("No Drivers nearby. Sorry :(");
           return false;
@@ -122,7 +124,7 @@ exports.postmethod = functions.https.onRequest(async (request, res) => {
           /**/console.log("Driver Lng: " + bestDriver.lng)
           /**/console.log("======================================================================")
           /**/console.log("\n")
-          
+
           // var isAccepted = false;
           // while(!isAccepted || noDriversAccept) {
           // // Now start sending FCM messages to each driver. and wait for them to return response or set a timeout 
@@ -143,7 +145,7 @@ exports.postmethod = functions.https.onRequest(async (request, res) => {
         res.status(200).send("This is a response from the server that your request has been ackowledged." + request.body)
         return true;
 
-      } 
+      }
     } else {
       res.status(401).send('You are not authorized')
       return false
