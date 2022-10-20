@@ -6,10 +6,6 @@ admin.initializeApp()
 const validateFirebaseIdToken = async (req, res, next) => {
   if ((!req.headers.authorization || !req.headers.authorization.startsWith('Bearer '))) {
     functions.logger.error(
-      'No Firebase ID token was passed as a Bearer token in the Authorization header.',
-      'Make sure you authorize your request by providing the following HTTP header:',
-      'Authorization: Bearer <Firebase ID Token>',
-      'or by passing a "__session" cookie.'
     );
     res.status(403).send('Unauthorized')
     return;
