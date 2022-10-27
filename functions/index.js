@@ -54,7 +54,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
 
     if (await validateFirebaseIdToken(request)) {
       let body = request.body
-      if (!body.userPostToken || typeof body.userPostToken != "string") {
+      if (!body.pushToken || typeof body.pushToken != "string") {
         res.status(400).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.userID || typeof body.userID != "string") {
@@ -66,7 +66,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
       } else if (!body.originLng || typeof body.originLng != "number") {
         res.status(400).send('Server Response: Incorrect Payload')
         return;
-      } else if (!body.originAddress || typeof body.originAddress != "number") {
+      } else if (!body.originAddress || typeof body.originAddress != "string") {
         res.status(400).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.destinationLat || typeof body.destinationLat != "number") {
@@ -75,7 +75,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
       } else if (!body.destinationLng || typeof body.destinationLng != "number") {
         res.status(400).send('Server Response: Incorrect Payload')
         return;
-      } else if (!body.destinationAddress || typeof body.destinationAddress != "number") {
+      } else if (!body.destinationAddress || typeof body.destinationAddress != "string") {
         res.status(400).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.travelTime_distance || typeof body.travelTime_distance != "string") {
