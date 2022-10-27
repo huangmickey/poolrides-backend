@@ -1,3 +1,4 @@
+const { Expo } = require('expo-server-sdk')
 const functions = require("firebase-functions")
 
 const admin = require('firebase-admin')
@@ -15,7 +16,7 @@ const validateFirebaseIdToken = async (req, res, next) => {
       'Authorization: Bearer <Firebase ID Token>',
       'or by passing a "__session" cookie.'
     );
-    res.status(403).send('Unauthorized')
+    res.status(403).send('Server Response: Unauthorized User')
     return;
   }
 
@@ -25,7 +26,7 @@ const validateFirebaseIdToken = async (req, res, next) => {
     idToken = req.headers.authorization.split('Bearer ')[1]
   } else {
     // No cookie
-    res.status(403).send('Unauthorized')
+    res.status(403).send('Server Response: Unauthorized User')
     return;
   }
 
@@ -47,112 +48,179 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
   }
 
   if (!request.header) {
-    res.status(400).send('No Header')
+    res.status(400).send('Request Error. Missing Information. How did you get here?')
     return false
   } else {
 
     if (await validateFirebaseIdToken(request)) {
       let body = request.body
       if (!body.userPostToken || typeof body.userPostToken != "string") {
-        res.status(400).send('Incorrect Payload')
-      } else if (!body.userID || typeof body.userID != "number") {
-        res.status(400).send('Incorrect Payload')
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
+      } else if (!body.userID || typeof body.userID != "string") {
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
       } else if (!body.originLat || typeof body.originLat != "number") {
-        res.status(400).send('Incorrect Payload')
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
       } else if (!body.originLng || typeof body.originLng != "number") {
-        res.status(400).send('Incorrect Payload')
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
+      } else if (!body.originAddress || typeof body.originAddress != "number") {
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
       } else if (!body.destinationLat || typeof body.destinationLat != "number") {
-        res.status(400).send('Incorrect Payload')
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
       } else if (!body.destinationLng || typeof body.destinationLng != "number") {
-        res.status(400).send('Incorrect Payload')
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
+      } else if (!body.destinationAddress || typeof body.destinationAddress != "number") {
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
       } else if (!body.travelTime_distance || typeof body.travelTime_distance != "string") {
-        res.status(400).send('Incorrect Payload')
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
       } else if (!body.travelTime_cost || typeof body.travelTime_cost != "number") {
-        res.status(400).send('Incorrect Payload')
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
       } else if (!body.travelTime_time || typeof body.travelTime_time != "string") {
-        res.status(400).send('Incorrect Payload')
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
       } else if (!body.ride_type || typeof body.ride_type != "string") {
-        res.status(400).send('Incorrect Payload')
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
       }
 
       var driverList = await getActiveDriverList();
+      if (driverList == false) {
+        res.status(400).send('Server Error: Unable to process request at this time')
+        return;
+      }
 
       /**/console.log("======================================================================")
       /**/console.log("Results for the Active Driver List:\n")
       /**/driverList.forEach(driver => {
-        /**/console.log("Driver ID: " + driver.DriverID)
-        /**/console.log("Driver Push Token: " + driver.PushToken)
+        /**/console.log("Driver ID: " + driver.driverID)
+        /**/console.log("Driver Push Token: " + driver.pushToken)
         /**/console.log("Driver Lat: " + driver.lat)
         /**/console.log("Driver Lng: " + driver.lng)
         /**/console.log("\n")
         /**/
-});
+      });
       /**/console.log(driverList.length)
       /**/console.log("======================================================================")
       /**/console.log("\n")
 
       if (driverList.length == 0 || driverList == false) {
-        res.status(400).send("No Drivers On App. Sorry :(");
+        res.status(400).send("Server Error: Unable to process request at this time");
         return false;
       } else {
+
+        //This new list is a list of drivers within XXX Miles Radius
         var newDriverList = removeDrivers(driverList, body.originLat, body.originLng);
 
         /**/console.log("======================================================================")
         /**/console.log("Results for the New Shortened Driver List:\n")
         /**/newDriverList.forEach(driver => {
-          /**/console.log("Driver ID: " + driver.DriverID)
-          /**/console.log("Driver Push Token: " + driver.PushToken)
+          /**/console.log("Driver ID: " + driver.driverID)
+          /**/console.log("Driver Push Token: " + driver.pushToken)
           /**/console.log("Driver Lat: " + driver.lat)
           /**/console.log("Driver Lng: " + driver.lng)
           /**/console.log("\n")
           /**/
-});
+        });
         /**/console.log(newDriverList.length)
         /**/console.log("======================================================================")
         /**/console.log("\n")
 
         if (newDriverList.length == 0 || newDriverList == false) {
-          res.status(400).send("No Drivers nearby. Sorry :(");
+          res.status(204).send("Request Error. No Drivers within 25 miles. Sorry :(");
           return false;
         } else {
+
+          //This list will be either the best driver if there was only one, or if there were more, the top 3-5 driver
           var bestDriver = compareInterests(body.userID, newDriverList, body.originLat, body.originLng);
+
+
+
+
+
+
+
+
+          bestDriver.forEach(async driver => {
+
+            //Check is ride has been accepted
+
+            // Retrieving Push Token from Driver element
+            let pushToken = driver.pushToken
+            console.log('Driver push token', pushToken)
+
+            // Creating connection to Expo Client
+            let expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
+
+            // Check if this is a valid Expo Push Token
+            if (!Expo.isExpoPushToken(pushToken)) {
+              console.error(`Push token ${pushToken} is not a valid Expo push token`);
+            }
+
+            // Create the messages that you want to send to clients
+            // Construct the message (see https://docs.expo.io/push-notifications/sending-notifications/)
+            let messages = []
+            messages.push({
+              to: pushToken,
+              sound: 'default',
+              title: 'You got a ride!',
+              body: 'Sent from firebase function via post request',
+              data: {
+                origin: { lat: body.originLat, lng: body.originLng },
+                destination: { lat: body.destinationLat, lng: body.destinationLng },
+                originAddress: body.originAddress,
+                destinationAddress: body.destinationAddress,
+              },
+            })
+            let receipt = await expo.sendPushNotificationsAsync(messages)
+            await timeout(15000);
+            console.log(receipt)
+          });
+
+
+
+
+
+
+
+
           /**/console.log("======================================================================")
           /**/console.log("THE BEST DRIVER SELECTED ISSSSS:\n")
-          /**/console.log("Driver ID: " + bestDriver.DriverID)
-          /**/console.log("Driver Push Token: " + bestDriver.PushToken)
+          /**/console.log("Driver ID: " + bestDriver.driverID)
+          /**/console.log("Driver Push Token: " + bestDriver.pushToken)
           /**/console.log("Driver Lat: " + bestDriver.lat)
           /**/console.log("Driver Lng: " + bestDriver.lng)
           /**/console.log("======================================================================")
           /**/console.log("\n")
 
-          // var isAccepted = false;
-          // while(!isAccepted || noDriversAccept) {
-          // // Now start sending FCM messages to each driver. and wait for them to return response or set a timeout 
-          // // and if the driver doesnt respond then move to the next. If none respond then set a var noDriversAccept = true
 
-          // // If Driver accepts
-          // isAccepted = true
-          // }
 
-          // //Alert the user that they have a ride or in the case that no drivers responded, respond that you couldnt find a driver
-          // sendUserFCM();
 
-          res.status(200).send("This is a response from the server that your request has been ackowledged." + request.body)
-          return true;
+
+
+          // res.status(200).send("This is a response from the server that your request has been ackowledged." + request.body)
+          // return true;
         }
-
-
-        res.status(200).send("This is a response from the server that your request has been ackowledged." + request.body)
-        return true;
-
       }
     } else {
-      res.status(401).send('You are not authorized')
+      res.status(401).send('Server Response: Unauthorized User')
       return false
     }
   }
 });
 
+
+function timeout(delay) {
+  return new Promise(res => setTimeout(res, delay));
+}
 
 async function getActiveDriverList() {
   try {
@@ -174,7 +242,7 @@ function removeDrivers(driverList, originLat, originLng) {
     /**/console.log("Origin Lng: " + originLng)
     /**/console.log("Distance between 2 points: " + distanceMatrix(driver.lat, driver.lng, originLat, originLng) + "\n")
 
-    if (distanceMatrix(driver.lat, driver.lng, originLat, originLng) < 10) {
+    if (distanceMatrix(driver.lat, driver.lng, originLat, originLng) < 25) {
       newDriverList.push(driver);
     }
   });
@@ -210,27 +278,55 @@ function compareInterests(userID, driverList, originLat, originLng) {
   return bestDriver
 }
 
+//Used to Cancel a ride
+exports.cancelRide = functions.https.onRequest(async (request, res) => {
+  if (request.method !== "POST") {
+    res.status(405).send('HTTP Method ' + request.method + ' not allowed')
+    return false
+  }
 
+  if (!request.header) {
+    res.status(400).send('Request Error. Missing Information. How did you get here?')
+    return false
+  } else {
 
+    if (await validateFirebaseIdToken(request)) {
 
-//NOTES FOR MICKEY.
-//1. If it costs money to write to a collection then we dont need to write each request to the DB
-//2. Should we get ask for a response from the rider when we alert then that they have a driver? or should we
-//just end it there?
-//3. Note, we are currently not using isProccessed. and I think isAccepted is used later.
-//4. Alot of the commented out stuff is there for future, I just wrote it out to give me an idea of the workflow
-// Getting the Active Driver list should work though from my testing     
+      //Get the record for the ride request. 
+      //If its been processed then kill the process
+      //If a drivers been notified, then send a cancel message.
 
+      res.status(200).send("Ride Request Canceled")
+      return true;
+    } else {
+      res.status(401).send('Server Response: Unauthorized User')
+      return false
+    }
+  }
+});
 
-// Old routine if in Main
-// admin.firestore().collection("activeDrivers").get()
-//   .then(snapshot => {
-//     let driverList = snapshot.docs.map(doc => {
-//       return doc.data();
-//     });
-//     console.log("Here is a list of current Drivers." + JSON.stringify(driverList));
-//     return driverList;
-//   }).catch(function (error) {
-//     res.status(400).send('Error retrieving Drivers')
-//     return false;
-//   })
+//Gets the LAT and LNG of the driver for the map to update in the app. That way we can see where the driver is 
+exports.getDriverLoc = functions.https.onRequest(async (request, res) => {
+  if (request.method !== "POST") {
+    res.status(405).send('HTTP Method ' + request.method + ' not allowed')
+    return false
+  }
+
+  if (!request.header) {
+    res.status(400).send('Request Error. Missing Information. How did you get here?')
+    return false
+  } else {
+
+    if (await validateFirebaseIdToken(request)) {
+
+      //Get the record for the ride request. 
+      //Get the Driver and return his location
+
+      res.status(200).send("Ride Request Canceled")
+      return true;
+    } else {
+      res.status(401).send('Server Response: Unauthorized User')
+      return false
+    }
+  }
+});
