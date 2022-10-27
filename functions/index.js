@@ -172,7 +172,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
               to: pushToken,
               sound: 'default',
               title: 'You got a ride!',
-              body: 'Sent from firebase function via post request',
+              body: 'Press to view details',
               data: {
                 origin: { lat: body.originLat, lng: body.originLng },
                 destination: { lat: body.destinationLat, lng: body.destinationLng },
