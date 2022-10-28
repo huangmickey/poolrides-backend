@@ -330,3 +330,29 @@ exports.getDriverLoc = functions.https.onRequest(async (request, res) => {
     }
   }
 });
+
+exports.sendPushNotification = functions.https.onRequest(async (request, res) => {
+  // Retrieving Push Token from Driver element
+  let pushToken = request.body.pushToken
+  console.log('Push token', pushToken)
+
+  // Creating connection to Expo Client
+  let expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
+
+  // Check if this is a valid Expo Push Token
+  if (!Expo.isExpoPushToken(pushToken)) {
+    console.error(`Push token ${pushToken} is not a valid Expo push token`);
+  }
+
+  // Create the messages that you want to send to clients
+  // Construct the message (see https://docs.expo.io/push-notifications/sending-notifications/)
+  let messages = []
+  messages.push({
+    to: pushToken,
+    sound: 'default',
+    title: 'You got a ride!',
+    body: 'Press to view details',
+  })
+  let receipt = await expo.sendPushNotificationsAsync(messages)
+  console.log(receipt)
+});
