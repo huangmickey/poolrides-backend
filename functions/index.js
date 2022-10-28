@@ -40,7 +40,6 @@ const validateFirebaseIdToken = async (req, res, next) => {
   }
 }
 
-
 exports.requestride = functions.https.onRequest(async (request, res) => {
   if (request.method !== "POST") {
     res.status(405).send('HTTP Method ' + request.method + ' not allowed')
@@ -92,6 +91,10 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
         return;
       }
 
+      const results = await admin.firestore().collection("rides").add({body, isAccepted: false});
+      const rideDoc = results._path.segments[1];
+      console.log("Here is the ID for the ride" + rideDoc);
+
       var driverList = await getActiveDriverList();
       if (driverList == false) {
         res.status(400).send('Server Error: Unable to process request at this time')
@@ -135,7 +138,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
         /**/console.log("\n")
 
         if (newDriverList.length == 0 || newDriverList == false) {
-          res.status(204).send("Request Error. No Drivers within 25 miles. Sorry :(");
+          res.status(400).send("Request Error. No Drivers within 25 miles. Sorry :(");
           return false;
         } else {
 
@@ -149,22 +152,20 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
 
 
 
-          bestDriver.forEach(async driver => {
+          
+          // Creating connection to Expo Client
+          let expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
 
-            //Check is ride has been accepted
+          driverList.forEach(async driver => {
 
             // Retrieving Push Token from Driver element
             let pushToken = driver.pushToken
             console.log('Driver push token', pushToken)
 
-            // Creating connection to Expo Client
-            let expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
-
             // Check if this is a valid Expo Push Token
             if (!Expo.isExpoPushToken(pushToken)) {
               console.error(`Push token ${pushToken} is not a valid Expo push token`);
             }
-
             // Create the messages that you want to send to clients
             // Construct the message (see https://docs.expo.io/push-notifications/sending-notifications/)
             let messages = []
@@ -180,9 +181,17 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
                 destinationAddress: body.destinationAddress,
               },
             })
+            console.log ("This is the message: " + messages);
             let receipt = await expo.sendPushNotificationsAsync(messages)
-            await timeout(15000);
             console.log(receipt)
+
+            // await timeout(15000);
+            // let isAccepted = admin.firestore().collection("rides").doc(rideDoc).get()
+             //console.log("Is the ride accepted yet?: " + isAccepted)
+            // if(isAccepted.isAccepted) {
+              res.status(200).send("This is a response from the server that your request has been ackowledged.")
+              return true;
+            // }
           });
 
 
@@ -192,22 +201,12 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
 
 
 
-          /**/console.log("======================================================================")
-          /**/console.log("THE BEST DRIVER SELECTED ISSSSS:\n")
-          /**/console.log("Driver ID: " + bestDriver.driverID)
-          /**/console.log("Driver Push Token: " + bestDriver.pushToken)
-          /**/console.log("Driver Lat: " + bestDriver.lat)
-          /**/console.log("Driver Lng: " + bestDriver.lng)
-          /**/console.log("======================================================================")
-          /**/console.log("\n")
 
 
 
 
-
-
-          // res.status(200).send("This is a response from the server that your request has been ackowledged." + request.body)
-          // return true;
+          res.status(409).send("Request Error. No Nearby Drivers accepted your ride. Sorry :(");
+          return false;
         }
       }
     } else {
@@ -217,8 +216,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
   }
 });
 
-
-function timeout(delay) {
+async function timeout(delay) {
   return new Promise(res => setTimeout(res, delay));
 }
 
@@ -269,10 +267,10 @@ function distanceMatrix(lat1, lon1, lat2, lon2) {
 }
 
 function compareInterests(userID, driverList, originLat, originLng) {
-  let bestDriver = driverList[0];
+  let bestDriver = [driverList[0]];
   driverList.forEach(driver => {
     if (distanceMatrix(driver.lat, driver.lng, originLat, originLng) < distanceMatrix(bestDriver.lat, bestDriver.lng, originLat, originLng)) {
-      bestDriver = driver;
+      bestDriver[0] = driver;
     }
   });
   return bestDriver
@@ -356,3 +354,12 @@ exports.sendPushNotification = functions.https.onRequest(async (request, res) =>
   let receipt = await expo.sendPushNotificationsAsync(messages)
   console.log(receipt)
 });
+
+
+/*
+  IMPORTANT:
+  USE THIS WHEN RUNNING FIREBASE EMULATOR.
+  THIS WILL SAVE ALL DATA IN THE FIRESTORE EACH TIME ITS CLOSED AND LOAD IT EACH TIME ITS RUN.
+
+  yarn firebase emulators:start --import=exported-dev-data --export-on-exit=exported-dev-data
+*/
