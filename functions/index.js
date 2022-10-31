@@ -3,6 +3,8 @@ const functions = require("firebase-functions")
 
 const admin = require('firebase-admin')
 admin.initializeApp()
+const { execSync } = require('child_process');
+const { time } = require('console');
 
 // Express middleware that validates Firebase ID Tokens passed in the Authorization HTTP header.
 // The Firebase ID token needs to be passed as a Bearer token in the Authorization HTTP header like this:
@@ -52,30 +54,31 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
   } else {
 
     if (await validateFirebaseIdToken(request)) {
+      functions.logger.log('passed validate firebase id token')
       let body = request.body
-      if (!body.pushToken || typeof body.pushToken != "string") {
-        res.status(400).send('Server Response: Incorrect Payload')
+      if (!body.riderPushToken || typeof body.riderPushToken != "string") {
+        res.status(401).send('Server Response: Incorrect Payload')
         return;
-      } else if (!body.userID || typeof body.userID != "string") {
-        res.status(400).send('Server Response: Incorrect Payload')
+      } else if (!body.riderUID || typeof body.riderUID != "string") {
+        res.status(402).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.originLat || typeof body.originLat != "number") {
-        res.status(400).send('Server Response: Incorrect Payload')
+        res.status(403).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.originLng || typeof body.originLng != "number") {
-        res.status(400).send('Server Response: Incorrect Payload')
+        res.status(404).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.originAddress || typeof body.originAddress != "string") {
-        res.status(400).send('Server Response: Incorrect Payload')
+        res.status(405).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.destinationLat || typeof body.destinationLat != "number") {
-        res.status(400).send('Server Response: Incorrect Payload')
+        res.status(406).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.destinationLng || typeof body.destinationLng != "number") {
-        res.status(400).send('Server Response: Incorrect Payload')
+        res.status(407).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.destinationAddress || typeof body.destinationAddress != "string") {
-        res.status(400).send('Server Response: Incorrect Payload')
+        res.status(408).send('Server Response: Incorrect Payload')
         return;
       } else if (!body.travelTime_distance || typeof body.travelTime_distance != "string") {
         res.status(400).send('Server Response: Incorrect Payload')
@@ -91,9 +94,9 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
         return;
       }
 
-      const results = await admin.firestore().collection("rides").add({body, isAccepted: false});
+      const results = await admin.firestore().collection("rides").add({ body, isAccepted: true });
       const rideDoc = results._path.segments[1];
-      console.log("Here is the ID for the ride" + rideDoc);
+      console.log("Here is the ID for the ride: " + rideDoc);
 
       var driverList = await getActiveDriverList();
       if (driverList == false) {
@@ -105,7 +108,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
       /**/console.log("Results for the Active Driver List:\n")
       /**/driverList.forEach(driver => {
         /**/console.log("Driver ID: " + driver.driverID)
-        /**/console.log("Driver Push Token: " + driver.pushToken)
+        /**/console.log("Driver Push Token: " + driver.driverPushToken)
         /**/console.log("Driver Lat: " + driver.lat)
         /**/console.log("Driver Lng: " + driver.lng)
         /**/console.log("\n")
@@ -127,7 +130,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
         /**/console.log("Results for the New Shortened Driver List:\n")
         /**/newDriverList.forEach(driver => {
           /**/console.log("Driver ID: " + driver.driverID)
-          /**/console.log("Driver Push Token: " + driver.pushToken)
+          /**/console.log("Driver Push Token: " + driver.driverPushToken)
           /**/console.log("Driver Lat: " + driver.lat)
           /**/console.log("Driver Lng: " + driver.lng)
           /**/console.log("\n")
@@ -142,69 +145,61 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
           return false;
         } else {
 
-          //This list will be either the best driver if there was only one, or if there were more, the top 3-5 driver
           var bestDriver = compareInterests(body.userID, newDriverList, body.originLat, body.originLng);
 
-
-
-
-
-
-
-
-          
-          // Creating connection to Expo Client
           let expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
 
-          driverList.forEach(async driver => {
+          for (const driver of bestDriver) {
 
-            // Retrieving Push Token from Driver element
-            let pushToken = driver.pushToken
-            console.log('Driver push token', pushToken)
-
-            // Check if this is a valid Expo Push Token
-            if (!Expo.isExpoPushToken(pushToken)) {
-              console.error(`Push token ${pushToken} is not a valid Expo push token`);
+            if (!Expo.isExpoPushToken(driver.driverPushToken)) {
+              console.error(`Push token ${driver.driverPushToken} is not a valid Expo push token`);
             }
-            // Create the messages that you want to send to clients
-            // Construct the message (see https://docs.expo.io/push-notifications/sending-notifications/)
+
             let messages = []
             messages.push({
-              to: pushToken,
+              to: driver.driverPushToken,
               sound: 'default',
               title: 'You got a ride!',
               body: 'Press to view details',
               data: {
+                riderUID: body.riderUID,
+                riderPushToken: body.riderPushToken,
                 origin: { lat: body.originLat, lng: body.originLng },
-                destination: { lat: body.destinationLat, lng: body.destinationLng },
                 originAddress: body.originAddress,
+                destination: { lat: body.destinationLat, lng: body.destinationLng },
                 destinationAddress: body.destinationAddress,
+                travelTime_distance: body.travelTime_distance,
+                travelTime_cost: body.travelTime_cost,
+                travelTime_time: body.travelTime_time,
+                rideDoc: rideDoc,
               },
             })
-            console.log ("This is the message: " + messages);
-            let receipt = await expo.sendPushNotificationsAsync(messages)
-            console.log(receipt)
 
-            // await timeout(15000);
-            // let isAccepted = admin.firestore().collection("rides").doc(rideDoc).get()
-             //console.log("Is the ride accepted yet?: " + isAccepted)
-            // if(isAccepted.isAccepted) {
+            // let receipt = await expo.sendPushNotificationsAsync(messages)
+            let results = await expo.sendPushNotificationsAsync(messages)
+            console.log(results);
+
+            //Wait 15 seconds
+            const date = Date.now();
+            let currentDate = null;
+
+            do {
+              currentDate = Date.now();
+            } while (currentDate - date < 15000);
+
+            //Check if the ride has been accepted
+            let doc = await admin.firestore().collection("rides").doc(rideDoc).get()
+              .then((value) => {
+                return value.get('isAccepted');
+              });
+
+            console.log("Is the ride accepted yet?: " + doc)
+
+            if (doc) {
               res.status(200).send("This is a response from the server that your request has been ackowledged.")
               return true;
-            // }
-          });
-
-
-
-
-
-
-
-
-
-
-
-
+            }
+          }
           res.status(409).send("Request Error. No Nearby Drivers accepted your ride. Sorry :(");
           return false;
         }
@@ -216,8 +211,10 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
   }
 });
 
+
 async function timeout(delay) {
   return new Promise(res => setTimeout(res, delay));
+  //return new Promise(res => { setTimeout(() => { res("VALUE TO RESOLVE");}, delay);});
 }
 
 async function getActiveDriverList() {
@@ -289,10 +286,21 @@ exports.cancelRide = functions.https.onRequest(async (request, res) => {
   } else {
 
     if (await validateFirebaseIdToken(request)) {
+      let body = request.body
+      if (!body.userID || typeof body.userID != "string") {
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
+      }
 
-      //Get the record for the ride request. 
-      //If its been processed then kill the process
-      //If a drivers been notified, then send a cancel message.
+
+      //Add Code. Check if ride is accepted. If yes then notify the driver before deleting. otherwise just delete
+      console.log("The user is is: " + body.userID)
+      var doc = admin.firestore().collection("rides").where('body.userID', '==', body.userID);
+      doc.get().then(function (querySnapshot) {
+        querySnapshot.forEach(function (doc) {
+          doc.ref.delete();
+        });
+      });
 
       res.status(200).send("Ride Request Canceled")
       return true;
@@ -303,8 +311,8 @@ exports.cancelRide = functions.https.onRequest(async (request, res) => {
   }
 });
 
-//Gets the LAT and LNG of the driver for the map to update in the app. That way we can see where the driver is 
-exports.getDriverLoc = functions.https.onRequest(async (request, res) => {
+//Used to Cancel a ride
+exports.cancelRide = functions.https.onRequest(async (request, res) => {
   if (request.method !== "POST") {
     res.status(405).send('HTTP Method ' + request.method + ' not allowed')
     return false
@@ -316,9 +324,23 @@ exports.getDriverLoc = functions.https.onRequest(async (request, res) => {
   } else {
 
     if (await validateFirebaseIdToken(request)) {
+      let body = request.body
+      if (!body.riderUID || typeof body.riderUID != "string") {
+        res.status(400).send('Server Response: Incorrect Payload')
+        return;
+      }
 
-      //Get the record for the ride request. 
-      //Get the Driver and return his location
+      //
+      //Add Code. Check if ride is accepted. If yes then notify the driver before deleting. otherwise just deleted
+      //
+
+      console.log("The user is is: " + body.riderUID)
+      var doc = admin.firestore().collection("rides").where('body.riderUID', '==', body.riderUID);
+      doc.get().then(function (querySnapshot) {
+        querySnapshot.forEach(function (doc) {
+          doc.ref.delete();
+        });
+      });
 
       res.status(200).send("Ride Request Canceled")
       return true;
@@ -327,32 +349,6 @@ exports.getDriverLoc = functions.https.onRequest(async (request, res) => {
       return false
     }
   }
-});
-
-exports.sendPushNotification = functions.https.onRequest(async (request, res) => {
-  // Retrieving Push Token from Driver element
-  let pushToken = request.body.pushToken
-  console.log('Push token', pushToken)
-
-  // Creating connection to Expo Client
-  let expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
-
-  // Check if this is a valid Expo Push Token
-  if (!Expo.isExpoPushToken(pushToken)) {
-    console.error(`Push token ${pushToken} is not a valid Expo push token`);
-  }
-
-  // Create the messages that you want to send to clients
-  // Construct the message (see https://docs.expo.io/push-notifications/sending-notifications/)
-  let messages = []
-  messages.push({
-    to: pushToken,
-    sound: 'default',
-    title: 'You got a ride!',
-    body: 'Press to view details',
-  })
-  let receipt = await expo.sendPushNotificationsAsync(messages)
-  console.log(receipt)
 });
 
 
