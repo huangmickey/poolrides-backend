@@ -94,7 +94,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
         return;
       }
 
-      const results = await admin.firestore().collection("rides").add({ body, isAccepted: true });
+      const results = await admin.firestore().collection("rides").add({ body, isAccepted: false });
       const rideDoc = results._path.segments[1];
       console.log("Here is the ID for the ride: " + rideDoc);
 
@@ -119,7 +119,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
       /**/console.log("\n")
 
       if (driverList.length == 0 || driverList == false) {
-        res.status(400).send("Server Error: Unable to process request at this time");
+        res.status(400).send("Request Error. No Drivers online to accept your ride. Sorry :(");
         return false;
       } else {
 
@@ -185,7 +185,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
 
             do {
               currentDate = Date.now();
-            } while (currentDate - date < 15000);
+            } while (currentDate - date < 25000);
 
             //Check if the ride has been accepted
             let doc = await admin.firestore().collection("rides").doc(rideDoc).get()
@@ -350,12 +350,3 @@ exports.cancelRide = functions.https.onRequest(async (request, res) => {
     }
   }
 });
-
-
-/*
-  IMPORTANT:
-  USE THIS WHEN RUNNING FIREBASE EMULATOR.
-  THIS WILL SAVE ALL DATA IN THE FIRESTORE EACH TIME ITS CLOSED AND LOAD IT EACH TIME ITS RUN.
-
-  yarn firebase emulators:start --import=exported-dev-data --export-on-exit=exported-dev-data
-*/
