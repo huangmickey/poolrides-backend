@@ -94,9 +94,8 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
         return;
       }
 
-      const results = await admin.firestore().collection("rides").add({ body, isAccepted: false });
-      const rideDoc = results._path.segments[1];
-      console.log("Here is the ID for the ride: " + rideDoc);
+      const deleteDoc = await admin.firestore().collection("rides").doc(body.riderUID).delete();
+      const createDoc = await admin.firestore().collection("rides").doc(body.riderUID).create({ body, isAccepted: false });
 
       var driverList = await getActiveDriverList();
       if (driverList == false) {
@@ -151,6 +150,18 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
 
           for (const driver of bestDriver) {
 
+            // Check DB for driver if he becomes busy from another ride that may be happening concurrently
+            let isDriverActive = await admin.firestore().collection("activeDrivers").doc(driver.driverID).get()
+              .then((value) => {
+                return value.get('isBusy');
+              });
+
+            console.log(isDriverActive);
+
+            if (isDriverActive) {
+              continue;
+            }
+
             if (!Expo.isExpoPushToken(driver.driverPushToken)) {
               console.error(`Push token ${driver.driverPushToken} is not a valid Expo push token`);
             }
@@ -171,13 +182,12 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
                 travelTime_distance: body.travelTime_distance,
                 travelTime_cost: body.travelTime_cost,
                 travelTime_time: body.travelTime_time,
-                rideDoc: rideDoc,
               },
             })
 
             // let receipt = await expo.sendPushNotificationsAsync(messages)
             let results = await expo.sendPushNotificationsAsync(messages)
-            console.log(results);
+            console.log("Results for ride Request FCM" + results);
 
             //Wait 15 seconds
             const date = Date.now();
@@ -188,7 +198,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
             } while (currentDate - date < 25000);
 
             //Check if the ride has been accepted
-            let doc = await admin.firestore().collection("rides").doc(rideDoc).get()
+            let doc = await admin.firestore().collection("rides").doc(body.riderUID).get()
               .then((value) => {
                 return value.get('isAccepted');
               });
@@ -230,14 +240,14 @@ function removeDrivers(driverList, originLat, originLng) {
   let newDriverList = [];
   driverList.forEach(driver => {
 
-    /**/console.log("Driver ID: " + driver.DriverID)
+    /**/console.log("Driver ID: " + driver.driverID)
     /**/console.log("Driver Lat: " + driver.lat)
     /**/console.log("Driver Lng: " + driver.lng)
     /**/console.log("Origin Lat: " + originLat)
     /**/console.log("Origin Lng: " + originLng)
     /**/console.log("Distance between 2 points: " + distanceMatrix(driver.lat, driver.lng, originLat, originLng) + "\n")
 
-    if (distanceMatrix(driver.lat, driver.lng, originLat, originLng) < 25) {
+    if (!driver.isBusy && distanceMatrix(driver.lat, driver.lng, originLat, originLng) < 25) {
       newDriverList.push(driver);
     }
   });
@@ -287,60 +297,38 @@ exports.cancelRide = functions.https.onRequest(async (request, res) => {
 
     if (await validateFirebaseIdToken(request)) {
       let body = request.body
-      if (!body.userID || typeof body.userID != "string") {
-        res.status(400).send('Server Response: Incorrect Payload')
-        return;
-      }
-
-
-      //Add Code. Check if ride is accepted. If yes then notify the driver before deleting. otherwise just delete
-      console.log("The user is is: " + body.userID)
-      var doc = admin.firestore().collection("rides").where('body.userID', '==', body.userID);
-      doc.get().then(function (querySnapshot) {
-        querySnapshot.forEach(function (doc) {
-          doc.ref.delete();
-        });
-      });
-
-      res.status(200).send("Ride Request Canceled")
-      return true;
-    } else {
-      res.status(401).send('Server Response: Unauthorized User')
-      return false
-    }
-  }
-});
-
-//Used to Cancel a ride
-exports.cancelRide = functions.https.onRequest(async (request, res) => {
-  if (request.method !== "POST") {
-    res.status(405).send('HTTP Method ' + request.method + ' not allowed')
-    return false
-  }
-
-  if (!request.header) {
-    res.status(400).send('Request Error. Missing Information. How did you get here?')
-    return false
-  } else {
-
-    if (await validateFirebaseIdToken(request)) {
-      let body = request.body
       if (!body.riderUID || typeof body.riderUID != "string") {
         res.status(400).send('Server Response: Incorrect Payload')
         return;
       }
 
-      //
-      //Add Code. Check if ride is accepted. If yes then notify the driver before deleting. otherwise just deleted
-      //
-
-      console.log("The user is is: " + body.riderUID)
-      var doc = admin.firestore().collection("rides").where('body.riderUID', '==', body.riderUID);
-      doc.get().then(function (querySnapshot) {
-        querySnapshot.forEach(function (doc) {
-          doc.ref.delete();
+      let rideDoc = await admin.firestore().collection("rides").doc(body.riderUID).get()
+        .then((value) => {
+          return value.data();
         });
-      });
+
+      console.log(rideDoc.isAccepted);
+      if (rideDoc.isAccepted == true) {
+
+        let expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
+
+        if (!Expo.isExpoPushToken(rideDoc.driverPushToken)) {
+          console.error(`Push token ${rideDoc.driverPushToken} is not a valid Expo push token`);
+        }
+
+        let messages = []
+        messages.push({
+          to: rideDoc.driverPushToken,
+          sound: 'default',
+          title: "You're Ride has been Canceled",
+          data: {},
+        })
+
+        let results = await expo.sendPushNotificationsAsync(messages)
+        console.log("Results for Cancel Ride Request FCM" + results);
+      }
+
+      await admin.firestore().collection("rides").doc(body.riderUID).delete()
 
       res.status(200).send("Ride Request Canceled")
       return true;
