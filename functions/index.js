@@ -182,6 +182,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
                 travelTime_distance: body.travelTime_distance,
                 travelTime_cost: body.travelTime_cost,
                 travelTime_time: body.travelTime_time,
+                notificationType: "rideReceived"
               },
             })
 
@@ -321,7 +322,7 @@ exports.cancelRide = functions.https.onRequest(async (request, res) => {
           to: rideDoc.driverPushToken,
           sound: 'default',
           title: "You're Ride has been Canceled",
-          data: {},
+          data: { notificationType: "rideCanceled" },
         })
 
         let results = await expo.sendPushNotificationsAsync(messages)
