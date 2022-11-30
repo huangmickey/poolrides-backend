@@ -95,7 +95,7 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
       }
 
       const deleteDoc = await admin.firestore().collection("rides").doc(body.riderUID).delete();
-      const createDoc = await admin.firestore().collection("rides").doc(body.riderUID).create({ body, isAccepted: false});
+      const createDoc = await admin.firestore().collection("rides").doc(body.riderUID).create({ body, isAccepted: false });
 
       var driverList = await getActiveDriverList();
       if (driverList == false) {
@@ -206,10 +206,10 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
 
             if (doc.isAccepted) {
               let data = {
-                message: "This is a response from the server that your request has been ackowledged.", 
+                message: "This is a response from the server that your request has been ackowledged.",
                 data: {
-                driverName: doc.driverName,
-                driverPushToken: doc.driverPushToken,
+                  driverName: doc.driverName,
+                  driverPushToken: doc.driverPushToken,
                 }
               }
               res.status(200).send(data)
@@ -284,7 +284,7 @@ function compareInterests(userID, driverList, originLat, originLng) {
 }
 
 //Used to Cancel a ride
-exports.cancelRide = functions.https.onRequest(async (request, res) => {
+exports.cancelride = functions.https.onRequest(async (request, res) => {
   if (request.method !== "POST") {
     res.status(405).send('HTTP Method ' + request.method + ' not allowed')
     return false
@@ -340,7 +340,7 @@ exports.cancelRide = functions.https.onRequest(async (request, res) => {
 });
 
 //Used to Get Drivers Location
-exports.getDriverLoc = functions.https.onRequest(async (request, res) => {
+exports.getdriverloc = functions.https.onRequest(async (request, res) => {
   if (request.method !== "POST") {
     res.status(405).send('HTTP Method ' + request.method + ' not allowed')
     return false
@@ -363,21 +363,83 @@ exports.getDriverLoc = functions.https.onRequest(async (request, res) => {
           return value.data();
         });
 
-        let driverDoc = await admin.firestore().collection("activeDrivers").doc(rideDoc.driverUID).get()
+      let driverDoc = await admin.firestore().collection("activeDrivers").doc(rideDoc.driverUID).get()
         .then((value) => {
           return value.data();
         });
 
-        let data = {
-          message: "This is a response from the server that your request has been ackowledged.", 
-          lat: driverDoc.lat,
-          lng: driverDoc.lng,
-        }
-        res.status(200).send(data)
-        return true;
+      let data = {
+        message: "This is a response from the server that your request has been ackowledged.",
+        lat: driverDoc.lat,
+        lng: driverDoc.lng,
+      }
+      res.status(200).send(data)
+      return true;
     } else {
       res.status(401).send('Server Response: Unauthorized User')
       return false
     }
+  }
+});
+
+exports.completeride = functions.https.onRequest(async (request, res) => {
+  if (request.method !== "POST") {
+    res.status(405).send('HTTP Method ' + request.method + ' not allowed')
+    return;
+  }
+
+  if (await validateFirebaseIdToken(request)) {
+    let body = request.body
+    let riderPushToken = body.riderPushToken
+
+    // Retrieve Ride Data
+    let doc = await admin.firestore().collection("rides").doc(body.riderUID).get()
+      .then((value) => {
+        return value.data();
+      });
+
+    let date = new Date();
+
+    let pstDate = date.toLocaleString('en-US', {
+      timeZone: "America/Los_Angeles"
+    });
+
+    let data = {
+      'Date': pstDate,
+      ...doc
+    }
+
+    console.log(data)
+    console.log(doc)
+
+    // Write the Ride Data to another document
+    // const createDoc = await admin.firestore().collection("rideHistory").doc().create(doc);
+    const createDoc1 = await admin.firestore().collection("rideHistory").doc().create(data);
+    // Delete the Ride Data from rides
+    const deleteDoc = await admin.firestore().collection("rides").doc(body.riderUID).delete();
+
+    // Notify rider that the ride is complete
+    let expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
+
+    if (!Expo.isExpoPushToken(riderPushToken)) {
+      console.error(`Push token ${riderPushToken} is not a valid Expo push token`);
+    }
+
+    let messages = []
+    messages.push({
+      to: riderPushToken,
+      sound: 'default',
+      title: "Your Ride is Complete!",
+      data: { notificationType: "rideComplete" },
+    })
+
+    let results = await expo.sendPushNotificationsAsync(messages)
+    console.log("Results for Complete Ride Request FCM" + results);
+
+    res.status(200).send("This is a response from the server that your request has been ackowledged.")
+
+  } else {
+    res.status(401).send('Server Response: Unauthorized User')
+    return;
   }
 });
