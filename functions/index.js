@@ -166,6 +166,44 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
               console.error(`Push token ${driver.driverPushToken} is not a valid Expo push token`);
             }
 
+            let driverUID = driver.driverID
+            let riderUID = body.riderUID
+
+
+
+            let driverDoc = await admin.firestore().collection("users").doc(driverUID).get()
+              .then((value) => {
+                return value.data();
+              });
+
+            let riderDoc = await admin.firestore().collection("users").doc(riderUID).get()
+              .then((value) => {
+                return value.data();
+              });
+
+            let driverInterests = {
+              ...driverDoc.generalinterests,
+              ...driverDoc.musicinterests,
+            }
+
+            let riderInterests = {
+              ...riderDoc.generalinterests,
+              ...riderDoc.musicinterests,
+            }
+
+            Array.from(Object.entries(driverInterests).sort()).map((entry) => {
+              const [key, value] = entry;
+              if (!value) {
+                delete driverInterests[key]
+              }
+            })
+            Array.from(Object.entries(riderInterests).sort()).map((entry) => {
+              const [key, value] = entry;
+              if (!value) {
+                delete riderInterests[key]
+              }
+            })
+
             let messages = []
             messages.push({
               to: driver.driverPushToken,
@@ -180,9 +218,10 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
                 destination: { lat: body.destinationLat, lng: body.destinationLng },
                 destinationAddress: body.destinationAddress,
                 travelTime_distance: body.travelTime_distance,
-                travelTime_cost: body.travelTime_cost,
+                travelTime_cost: body.travelTime_cost.toFixed(2),
                 travelTime_time: body.travelTime_time,
                 notificationType: "rideReceived",
+                riderInterests: riderInterests,
               },
             })
 
@@ -210,6 +249,8 @@ exports.requestride = functions.https.onRequest(async (request, res) => {
                 data: {
                   driverName: doc.driverName,
                   driverPushToken: doc.driverPushToken,
+                  driverProfilePicture: doc.driverProfilePicture,
+                  driverInterests: driverInterests,
                 }
               }
               res.status(200).send(data)
